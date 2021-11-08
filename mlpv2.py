@@ -13,13 +13,16 @@ class MLPv2:
         weights = []
         derivatives = []
         bias = []
+        bias_derivative = []
         for i in range(self.num_layers - 1):
             weights.append(np.random.rand(self.layers[i + 1], self.layers[i]))
             derivatives.append(np.zeros((self.layers[i + 1], self.layers[i])))
             bias.append(np.random.rand(self.layers[i + 1], 1))
+            bias_derivative.append(np.zeros((self.layers[i + 1], 1)))
         self.weights = weights  # wygenerowane początkowe wagi z uwzględnieniem bias
         self.derivatives = derivatives  # wygenerowanie tablic na pochodne potrzebne do backpropagation
         self.bias = bias
+        self.bias_derivative = bias_derivative
         activation = []  # zapisanie starych funkcji aktywacji, inicjacja
         for i in range(len(self.layers)):
             activation.append(np.zeros(self.layers[i]))
@@ -32,7 +35,8 @@ class MLPv2:
         for i, weight in enumerate(self.weights):
             net_weight = []
             for w, b in zip(weight, self.bias[i]):
-                net_weight.append(float(np.dot(activation, w) + b))  # wyliczanie iloczynu wag i wektora aktywacji
+                net_weight.append(float(np.dot(activation, w)+b))
+                  # wyliczanie iloczynu wag i wektora aktywacji
             net_weight = list(map(self.sigma_activation, net_weight))  # przetworzenie danych przez funkcję aktywacji
             activation = net_weight  # przekazanie danych do kolejnej warstwy
             self.activation[i + 1] = np.array(activation)  # zapisanie wartości aktywacji do propagacji wstecznej
@@ -41,35 +45,50 @@ class MLPv2:
     def backword_propagate(self, error):
         for i in reversed(range(len(self.weights))):
             act = self.activation[i + 1]
+            error_re = np.array([error])
+            #print(error_re)
+            #error_re = error_re.reshape(error_re.shape[0], -1)
             delta = error * np.array(list(map(self.sigma_derivativ, act)))
+            d2 = list(delta)
+            #d2.append(1)
+            d2 = np.array(d2)
+            d2 = d2.reshape(d2.shape[0], -1)
+            self.bias_derivative[i] = np.array(d2)
+            #print("biasder od {} {}".format(i, sum(self.bias_derivative[i].shape)))
             delta_re = delta.reshape(delta.shape[0], -1).T
             current_activations = self.activation[i]
             current_activations = current_activations.reshape(current_activations.shape[0], -1)
             self.derivatives[i] = np.matmul(current_activations, delta_re)
+            #self.bias_derivative[i] = np.dot(self.bias[i], error_re)
+            #print(self.bias_derivative[i])
             error = np.dot(delta, self.weights[i])
 
 
     def train(self, input, target):
-        for i in range(0, 10):
+        ammount = len(input)
+        for i in range(0, 1000):
             sum_errors = 0
             for _inp, _targ in zip(input, target):
                 output = self.forward_propagate(_inp)
-                error = -(_targ - output)
+                error =  (output - _targ)**2
                 self.backword_propagate(error)
-                self.gradient_descent()
+                self.gradient_descent(ammount)
                 if error != 0:
-                    sum_errors += 1
+                    sum_errors += error
+                #print('weight od  0: {}'.format(self.weights[0]))
             print("Error: {} at epoch {}".format(sum_errors / len(input), i + 1))
 
-    def gradient_descent(self, learningRate=0.001):
-        #print("suma 1 {}".format(sum(self.weights[1][0])))
+    def gradient_descent(self,ammount, learningRate=0.1):
+        
         for i in range(len(self.weights)):
-            self.weights[i] += learningRate*self.derivatives[i].T
-            self.bias[i] += learningRate*self.bias[i]
+            
+            self.weights[i] -= learningRate/ammount*self.derivatives[i].T
+            self.bias[i] -= learningRate/ammount*self.bias_derivative[i]
             #print(weights[i])
             #print(bias[i])
         #print("suma 2 {}".format(sum(self.weights[1])[0]))
-
+        #print("wagi od 0  {}".format( sum(self.weights[0])))
+        #print("wagi od 1 {}".format(i, self.weights[2]))
 
 
 
