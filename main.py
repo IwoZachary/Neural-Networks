@@ -1,24 +1,27 @@
-#from keras.datasets import mnist
-#import numpy as np
+import mnist
 
-from mlpv2 import MLPv2
-from mnist import MNIST
-mndata = MNIST('./train')
-images, labels = mndata.load_training()
-img = []
-labl = []
-for i in range(0, 20):
-    img.append(images[i])
-    labl.append(labels[i])
-#print(images[0])
-#(train_X, train_y), (test_X, test_y) = mnist.load_data()
-#a = []
-#for i in range (30):
-#    a.append(np.ravel(train_X[i]))
-#a = np.array(a)
-#print(a.shape)
-#print(train_y.shape)
+from mlp import  MLPv2
+from multiprocessing import Pool
 
-mlp =MLPv2(784, [500, 300])
+def test(num_inputs, hidden_layers,learnig_rate, epoches, weight_loc, weight_scale, bias_loc, bias_scale, train_x, train_y, batch_num, test_x, test_y):
+    results = []
+    mlp = MLPv2(num_inputs, hidden_layers, learnig_rate, epoches, weight_loc, weight_scale, bias_loc, bias_scale)
+    results.append(mlp.train(train_x, train_y, batch_num))
+    print(mlp.validate(test_x, test_y))
 
-mlp.train(img, labl)
+if __name__ == "__main__":
+
+
+    a = mnist.train_images()[:500]
+    b = mnist.test_images()[:500]
+    train_x = []
+    test_x = []
+    for el1, el2 in zip(a, b):
+        train_x.append(el1.flatten())
+        test_x.append(el2.flatten())
+
+    train_y = mnist.train_labels()[:100]
+    test_y = mnist.test_labels()[:100]
+    with Pool(processes=10) as pool:
+        multiple_results = [pool.apply_async(test(784, [100, 100], 0.01, 400, 0, 0.5, 0, 0.5, train_x, train_y, 1, test_x, test_y)) for i in range(8)]
+

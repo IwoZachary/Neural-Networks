@@ -1,60 +1,116 @@
 import numpy as np
-import copy
-
 NUMBER_OF_OUTPUTS = 10
 
+class MLPv2:
+    def __init__(self, num_inputs, hidden_layers,learnig_rate, epoches, weight_loc, weight_scale, bias_loc, bias_scale):
+        '''
 
-class MLP:
-    def __init__(self, num_inputs, hidden_layers):
-
+        :param num_inputs: liczba parametrów wejściowych we wzorcu
+        :param hidden_layers: lista zawierająca liczbę neuronów w warstwie ukrytej
+        :param weight_loc: wartość reprezentująca środek rozkładu wag
+        :param weight_scale: odchylenie standardowe wagi
+        :param bias_loc: wartość reprezentująca środek rozkładu biasów
+        :param bias_scale: odchylenie standardowe biasów
+        '''
+        self.learning_rate = learnig_rate
         self.num_inputs = num_inputs  # ilość danych wejściowych
         self.layers = [self.num_inputs] + hidden_layers + [NUMBER_OF_OUTPUTS]  # warstwy z ilością neuronów w warstwie
         self.num_layers = len(self.layers)  # liczba warstw
+        self.activation = [] #wartość funkcji aktywacji
+        self.boost = [] #wartość funkcji pobudzenia
+        self.derivatives = [] #pochodne wag
+        self.epoches = epoches
         weights = []
-        derivatives = []
         bias = []
         for i in range(self.num_layers - 1):
-            weights.append(np.random.rand(self.layers[i + 1], self.layers[i]))
-            derivatives.append(np.zeros((self.layers[i + 1], self.layers[i])))
-            bias.append(np.random.rand(self.layers[i + 1], 1))
-        self.weights = weights  # wygenerowane początkowe wagi z uwzględnieniem bias
-        self.derivatives = derivatives  # wygenerowanie tablic na pochodne potrzebne do backpropagation
-        self.bias = bias
-        activation = []  # zapisanie starych funkcji aktywacji, inicjacja
-        for i in range(len(self.layers)):
-            activation.append(np.zeros(self.layers[i]))
-        self.activation = activation
+            weights.append(
+                np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i+1])))
+            bias.append(
+                np.random.normal(loc=bias_loc, scale=bias_scale, size=( self.layers[i + 1])))
+        self.weights = weights #wagi
+        self.bias = bias #biasy
 
     def forward_propagate(self, input_x):
-        activation = input_x  # warstwa wejściowa plus bias
-        self.activation[0] = activation
+        act = input_x  # wartość pobudzenia w warstwie pierwszej
+        self.activation.append(act)
         for i, weight in enumerate(self.weights):
-            net_weight = []
-            for w, b in zip(weight, self.bias[i]):
-                net_weight.append(float(np.dot(activation, w) + b))  # wyliczanie iloczynu wag i wektora aktywacji
-            net_weight = list(map(self.sigma_activation, net_weight))  # przetworzenie danych przez funkcję aktywacji
-            activation = net_weight  # przekazanie danych do kolejnej warstwy
-            self.activation[i + 1] = activation  # zapisanie wartości aktywacji do propagacji wstecznej
-        return self.softmax(activation)
+            booster = np.dot(act, weight)
+            act = self.tanh(booster)
+            self.activation.append(act)
+        return self.softmax(act)
 
-    def backword_propagate(self, error):
-        NotImplemented
+    def backward_propagate(self, error):
+        for i in reversed(range(len(self.weights))):
+            activation_upper = self.activation[i+1]
+            derivative = error * self.tanh_derivative(activation_upper)
+            derivative_reshape = derivative.reshape(derivative.shape[0], -1).T
+            activation_current = self.activation[i]
+            activation_current = activation_current.reshape(activation_current.shape[0], -1)
+            self.derivatives.append(np.dot(activation_current, derivative_reshape))
+            error = np.dot(derivative, self.weights[i].T)
+        self.derivatives.reverse()
 
-    def train(self, input, target):
-        NotImplemented
+    def train(self, input, target, batch):
+        start = True
+        ammount = len(input)
+        input = np.array(input)
+        target = np.array(target)
+        b_input = np.split(input, batch)
+        b_target = np.split(target, batch)
+        for b_i, b_t in zip(b_input, b_target):
+            for i in range(0, self.epoches):
+                sum_errors = 0
+                for _inp, _targ in zip(b_i, b_t):
+                    self.activation.clear()
+                    self.boost.clear()
+                    self.derivatives.clear()
+                    output = self.forward_propagate(_inp)
+                    t = np.zeros(NUMBER_OF_OUTPUTS)
+                    t[_targ] = 1
+                    error = t - output
+                    self.backward_propagate(error)
+                    self.gradient_descent(ammount)
+                    sum_errors += error.mean() ** 2
+                if start:
+                    startError = sum_errors / ammount
+                    start = False
+        endError = sum_errors / ammount
+        avverageStep = (startError - endError)/self.epoches
+        print(" {} {} {} ".format(startError, endError, avverageStep),end= "")
+                #print("Error: {} at epoch {}".format(sum_errors / ammount, i + 1))
 
-    def gradient_descent(self, learningRate=0.001):
-        NotImplemented
+    def gradient_descent(self, ammount):
+        for i in range(len(self.weights)):
+            self.weights[i] += self.learning_rate/ammount*self.derivatives[i]
+            self.bias[i] += self.learning_rate/ammount*self.derivatives[i].T.sum(axis =1)
+
+    def validate(self, input_data, target):
+        correct = 0
+        for _input, _target in zip(input_data, target):
+            res = self.forward_propagate(_input)
+            _value = max(res)
+            _value = res.index(_value)
+            if _value == _target:
+                correct += 1
+        return correct/len(input_data)
+
+
 
     @staticmethod
     def sigma_activation(x):
-        y = 1.0 / (1 + np.exp(-x))
-        return y
+        return 1/(1 + np.exp(-x))
 
     @staticmethod
-    def sigma_derivativ(x):
-        y = np.exp(-x) / (1 + np.exp(-x)) ** 2
-        return y
+    def sigma_derivative(x):
+        return np.exp(-x) / (1 + np.exp(-x)) ** 2
+
+    @staticmethod
+    def relu(x):
+        return np.where(x > 0, x, 0)
+
+    @staticmethod
+    def softplus(x):
+        return 1/(1 + np.exp(-x))
 
     @staticmethod
     def softmax(f_activation):
@@ -62,6 +118,11 @@ class MLP:
         for x in f_activation:
             sum_e += np.exp(x)
         f_activation = list(map(lambda el: el / sum_e, f_activation))
-        max_val = max(f_activation)
-        max_index = f_activation.index(max_val)
-        return max_index
+        return f_activation
+
+    @staticmethod
+    def tanh(x):
+        return 2 / (1 + np.exp(-2 * x)) - 1
+
+    def tanh_derivative(self, x):
+        return 1 - self.tanh(x) ** 2
