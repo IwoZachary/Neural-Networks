@@ -22,6 +22,6 @@ if __name__ == "__main__":
 
     train_y = mnist.train_labels()[:100]
     test_y = mnist.test_labels()[:100]
-    with Pool(processes=10) as pool:
-        multiple_results = [pool.apply_async(test(784, [100, 100], 0.01, 400, 0, 0.5, 0, 0.5, train_x, train_y, 1, test_x, test_y)) for i in range(8)]
+    with Pool(processes=1) as pool:
+        multiple_results = [pool.apply_async(test(784, [100, 100], 0.01, 4, 0, 0.5, 0, 0.5, train_x, train_y, 1, test_x, test_y)) for i in range(1)]
 

@@ -1,6 +1,6 @@
 import numpy as np
 NUMBER_OF_OUTPUTS = 10
-
+EPSILON = 0.00000001
 class MLPv2:
     def __init__(self, num_inputs, hidden_layers,learnig_rate, epoches, weight_loc, weight_scale, bias_loc, bias_scale):
         '''
@@ -22,13 +22,18 @@ class MLPv2:
         self.epoches = epoches
         weights = []
         bias = []
+        previousDerivatives = []
+        previousBias = []
         for i in range(self.num_layers - 1):
             weights.append(
                 np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i+1])))
             bias.append(
                 np.random.normal(loc=bias_loc, scale=bias_scale, size=( self.layers[i + 1])))
+            previousDerivatives.append(np.zeros(shape=(self.layers[i], self.layers[i+1])))
         self.weights = weights #wagi
         self.bias = bias #biasy
+        self.previousDerivatives = previousDerivatives
+        
 
     def forward_propagate(self, input_x):
         act = input_x  # wartość pobudzenia w warstwie pierwszej
@@ -83,6 +88,40 @@ class MLPv2:
         for i in range(len(self.weights)):
             self.weights[i] += self.learning_rate/ammount*self.derivatives[i]
             self.bias[i] += self.learning_rate/ammount*self.derivatives[i].T.sum(axis =1)
+    
+    def gradient_descent_with_momentum(self, gamma):
+        for i in range(len(self.weights)):
+            delta_w = gamma*self.previousDerivatives[i]+ self.learning_rate*self.derivatives[i]
+            self.weights[i] -= delta_w 
+            self.bias[i] -= delta_w.T.sum(axis =1)
+            self.previousDerivatives[i] = delta_w
+
+    def gradient_descent_with_nestov(self, gamma):
+        for i in range(len(self.weights)):
+            delta_w = gamma*self.previousDerivatives[i]+ self.learning_rate*(self.weight[i] - self.derivatives[i])
+            self.weights[i] -= delta_w 
+            self.bias[i] -= delta_w.T.sum(axis =1)
+            self.previousDerivatives[i] = delta_w
+    
+    def adaGrad(self):
+        for i in range(len(self.weights)):
+            delta_w = self.learning_rate/(np.sqrt(self.derivatives[i]*self.derivatives[i].T)+ EPSILON)*self.derivatives[i]
+            self.weights[i] -= delta_w 
+            self.bias[i] -= delta_w.T.sum(axis =1)
+            
+
+    def adaDelta(self, par):
+        st_p = 0 #dopasować wymiary do rozmiarów tablic
+        prev_delt = 0
+        for i in range(len(self.weights)):
+            st = par* st_p + (1 - par)*np.power(self.derivatives[i])
+            delta_w = np.sqrt(prev_delt+EPSILON)/np.sqrt(st+EPSILON)*self.derivatives[i]
+            self.weights[i] -= delta_w 
+            self.bias[i] -= delta_w.T.sum(axis =1)
+            st_p = st
+            prev_delt = delta_w
+
+
 
     def validate(self, input_data, target):
         correct = 0
