@@ -5,16 +5,13 @@ EPSILON = 0.00000001
 
 
 class MLPv2:
-    def __init__(self, num_inputs, hidden_layers, learnig_rate, epoches, weight_loc, weight_scale, bias_loc,
-                 bias_scale):
+    def __init__(self, num_inputs, hidden_layers, learnig_rate, epoches, weight_loc, weight_scale):
         '''
 
         :param num_inputs: liczba parametrów wejściowych we wzorcu
         :param hidden_layers: lista zawierająca liczbę neuronów w warstwie ukrytej
         :param weight_loc: wartość reprezentująca środek rozkładu wag
         :param weight_scale: odchylenie standardowe wagi
-        :param bias_loc: wartość reprezentująca środek rozkładu biasów
-        :param bias_scale: odchylenie standardowe biasów
         '''
         self.learning_rate = learnig_rate
         self.num_inputs = num_inputs  # ilość danych wejściowych
@@ -24,27 +21,72 @@ class MLPv2:
         self.boost = []  # wartość funkcji pobudzenia
         self.derivatives = []  # pochodne wag
         self.epoches = epoches
-        weights = []
-        bias = []
+       # weights = []
+       # bias = []
         previousDerivatives = []
         sumGradient = []
         sumWeightDelta = []
         previousWeightDelta = []
+        mt = []
+        vt = []
         for i in range(self.num_layers - 1):
-            weights.append(
-                np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i + 1])))
-            bias.append(
-                np.random.normal(loc=bias_loc, scale=bias_scale, size=(self.layers[i + 1])))
             previousDerivatives.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
             sumGradient.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
             sumWeightDelta.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
             previousWeightDelta.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
-        self.weights = weights  # wagi
-        self.bias = bias  # biasy
+            mt.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
+            vt.append(np.zeros(shape=(self.layers[i], self.layers[i + 1])))
+        (self.weights, self.bias) = self.xavier_weight_dist(weight_loc, weight_scale)
         self.previousDerivatives = previousDerivatives
         self.sumGradient = sumGradient
         self.sumWeightDelta = sumWeightDelta
         self.previousWeightDelta = previousWeightDelta
+        self.mt = mt
+        self.vt = vt
+
+    def normal_weight_dist(self, weight_loc, weight_scale):
+        weights = []
+        bias = []
+        for i in range(self.num_layers - 1):
+            weights.append(
+                np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i + 1])))
+            bias.append(
+                np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i + 1])))
+        return(weights, bias)
+
+    def xavier_weight_dist(self, weight_loc, weight_scale):
+        weights = []
+        bias = []
+        xavier_val = []
+        for i in range(len(self.layers)-1):
+         xavier_val.append(2/(self.layers[i]+self.layers[i+1]))
+
+        for i in range(self.num_layers - 1):
+            temp_w =  np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i + 1]))
+            temp_w = temp_w * xavier_val[i]
+            temp_b = np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i + 1]))
+            temp_b = temp_b * xavier_val[i]
+            weights.append(temp_w)
+            bias.append(temp_b)
+        return (weights, bias)
+
+    def he_weight_dist(self, weight_loc, weight_scale):
+        weights = []
+        bias = []
+        he_val = []
+        for i in range(len(self.layers) - 1):
+            he_val.append(2 / (self.layers[i]))
+
+        for i in range(self.num_layers - 1):
+            temp_w = np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i], self.layers[i + 1]))
+            temp_w = temp_w * he_val[i]
+            temp_b = np.random.normal(loc=weight_loc, scale=weight_scale, size=(self.layers[i + 1]))
+            temp_b = temp_b * he_val[i]
+            weights.append(temp_w)
+            bias.append(temp_b)
+        return (weights, bias)
+
+
 
     def forward_propagate(self, input_x):
         act = input_x  # wartość pobudzenia w warstwie pierwszej
@@ -88,13 +130,14 @@ class MLPv2:
                     #self.gradient_descent(ammount)
                     #self.gradient_descent_with_momentum(0.7, ammount)
                     #self.gradient_descent_with_nestov(0.7, ammount)
-                    #self.adaGrad()
-                    self.adaDelta(0.9)
+                    #self.adaGrad(ammount)
+                    self.adaDelta(0.9, ammount)
+                    #self.adam(0.9, 0.999, ammount)
                     sum_errors += error.mean() ** 2
                 if start:
                     startError = sum_errors / ammount
                     start = False
-                print("Error: {} at epoch {}".format(sum_errors / ammount, i + 1))
+                #print("Error: {} at epoch {}".format(sum_errors / ammount, i + 1))
         endError = sum_errors / ammount
         avverageStep = (startError - endError) / self.epoches
         print(" {} {} {} ".format(startError, endError, avverageStep), end="")
@@ -115,18 +158,18 @@ class MLPv2:
     def gradient_descent_with_nestov(self, gamma, ammount):
         for i in range(len(self.weights)):
             delta_w = gamma * self.previousDerivatives[i] + self.learning_rate/ammount * (self.weights[i] - gamma*self.previousDerivatives[i])
-            self.weights[i] -= delta_w
-            self.bias[i] -= delta_w.T.sum(axis=1)
+            self.weights[i] += delta_w
+            self.bias[i] += delta_w.T.sum(axis=1)
             self.previousDerivatives[i] = delta_w
 
-    def adaGrad(self):
+    def adaGrad(self, ammount):
         for i in range(len(self.weights)):
             self.sumGradient[i] += self.derivatives[i] * self.derivatives[i]
-            delta_w = self.learning_rate/np.sqrt((self.sumGradient[i]+EPSILON))*self.derivatives[i]
+            delta_w = (self.learning_rate/ammount)/np.sqrt((self.sumGradient[i]+EPSILON))*self.derivatives[i]
             self.weights[i] += delta_w
             self.bias[i] += delta_w.T.sum(axis=1)
 
-    def adaDelta(self, par):
+    def adaDelta(self, par, ammount):
         for i in range(len(self.weights)):
             self.sumGradient[i] = par*self.sumGradient[i] + (1-par)*(self.derivatives[i] * self.derivatives[i])
             self.sumWeightDelta[i] = par*self.sumWeightDelta[i]+(1-par)*(self.previousWeightDelta[i]*self.previousWeightDelta[i])
@@ -134,6 +177,16 @@ class MLPv2:
             self.weights[i] += delta_w
             self.bias[i] += delta_w.T.sum(axis=1)
             self.previousWeightDelta[i] = delta_w
+
+    def adam(self, b1, b2, ammount):
+        for i in range(len(self.weights)):
+            self.mt[i] = b1 * self.mt[i] + (1 - b1)*self.derivatives[i]
+            self.vt[i] = b2 * self.vt[i] + (1 - b2)*self.derivatives[i]*self.derivatives[i]
+            mt_prim = self.mt[i]/(1 - b1)
+            vt_prim = self.vt[i]/(1 - b2)
+            delta_w = (self.learning_rate/ammount)/(np.sqrt(vt_prim)+EPSILON)*mt_prim
+            self.weights[i] += delta_w
+            self.bias[i] += delta_w.T.sum(axis=1)
 
 
     def validate(self, input_data, target):
@@ -156,10 +209,13 @@ class MLPv2:
 
     @staticmethod
     def relu(x):
-        return np.where(x > 0, x, 0)
+        return np.where(x >= 0, x, 0)
 
     @staticmethod
     def softplus(x):
+        return np.log(1 + np.exp(x))
+    @staticmethod
+    def softplus_derivative(x):
         return 1 / (1 + np.exp(-x))
 
     @staticmethod
